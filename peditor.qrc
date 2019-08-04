@@ -1,0 +1,15 @@
+<RCC>
+    <qresource prefix="/items"/>
+    <qresource prefix="/">
+        <file>assets/import.png</file>
+        <file>assets/copy.png</file>
+        <file>assets/cut.png</file>
+        <file>assets/delete.png</file>
+        <file>assets/new.png</file>
+        <file>assets/paste.png</file>
+        <file>assets/trim.png</file>
+        <file>assets/undo.png</file>
+        <file>assets/waveform.png</file>
+        <file>assets/about.png</file>
+    </qresource>
+</RCC>
