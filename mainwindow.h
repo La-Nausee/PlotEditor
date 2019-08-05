@@ -6,8 +6,11 @@
 #include <QListWidget>
 #include <QList>
 #include <QByteArray>
+#include <QTemporaryFile>
 
-#define CSV_DELIMITER   ','
+#define CSV_DELIMITER_TAB               '\t'
+#define CSV_DELIMITER_COMMA             ','
+#define CSV_DELIMITER_SEMICOLON         ';'
 
 using namespace QtDataVisualization;
 
@@ -34,22 +37,22 @@ private slots:
     void signalListItemSelectionChanged();
     void signalListContextMenu(const QPoint &);
 private:
-    char delimiter;
     bool withHeader;
-    qint64 skipHeader;
+    qint64 m_index;
     QFile dataFile;
     QList<QByteArray> dataList;
-    QList<QString> headerList;
+    QList<QStringList> headerList;
     QFuture<void> future;
 
     QAction *importAct;
     QAction *undoAct;
+    QAction *redoAct;
     QAction *cutAct;
     QAction *copyAct;
     QAction *pasteAct;
     QAction *deleteAct;
     QAction *trimAct;
-    QAction *waveAct;
+    QAction *aboutAct;
 
     QListWidget *fileList;
     QListWidget *columnList;

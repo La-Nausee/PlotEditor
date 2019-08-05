@@ -53,26 +53,37 @@ void MainWindow::createActions()
 
     const QIcon undoIcon = QIcon::fromTheme("document-new", QIcon(":/assets/undo.png"));
     undoAct = new QAction(undoIcon, tr("&Undo"), this);
+    undoAct->setShortcut(QKeySequence::Undo);
     //connect(undoAct, &QAction::triggered, this, &MainWindow::importData);
     mainToolBar->addAction(undoAct);
+    
+    const QIcon redoIcon = QIcon::fromTheme("document-new", QIcon(":/assets/redo.png"));
+    redoAct = new QAction(redoIcon, tr("&Redo"), this);
+    redoAct->setShortcut(QKeySequence::Redo);
+    mainToolBar->addAction(redoAct);
+    //connect(undoAct, &QAction::triggered, this, &MainWindow::importData);
 
     const QIcon cutIcon = QIcon::fromTheme("document-new", QIcon(":/assets/cut.png"));
     cutAct = new QAction(cutIcon, tr("&Cut"), this);
+    cutAct->setShortcut(QKeySequence::Cut);
     //connect(undoAct, &QAction::triggered, this, &MainWindow::importData);
     mainToolBar->addAction(cutAct);
 
     const QIcon copyIcon = QIcon::fromTheme("document-new", QIcon(":/assets/copy.png"));
     copyAct = new QAction(copyIcon, tr("&Copy"), this);
+    copyAct->setShortcut(QKeySequence::Copy);
     //connect(undoAct, &QAction::triggered, this, &MainWindow::importData);
     mainToolBar->addAction(copyAct);
 
     const QIcon pasteIcon = QIcon::fromTheme("document-new", QIcon(":/assets/paste.png"));
     pasteAct = new QAction(pasteIcon, tr("&Paste"), this);
+    pasteAct->setShortcut(QKeySequence::Paste);
     //connect(undoAct, &QAction::triggered, this, &MainWindow::importData);
     mainToolBar->addAction(pasteAct);
 
     const QIcon deleteIcon = QIcon::fromTheme("document-new", QIcon(":/assets/delete.png"));
     deleteAct = new QAction(deleteIcon, tr("&Delete"), this);
+    deleteAct->setShortcut(QKeySequence::Delete);
     //connect(undoAct, &QAction::triggered, this, &MainWindow::importData);
     mainToolBar->addAction(deleteAct);
 
@@ -83,11 +94,10 @@ void MainWindow::createActions()
 
     mainToolBar->addSeparator();
 
-    const QIcon waveIcon = QIcon::fromTheme("document-new", QIcon(":/assets/waveform.png"));
-    waveAct = new QAction(waveIcon, tr("&Waveform"), this);
+    const QIcon aboutIcon = QIcon::fromTheme("document-new", QIcon(":/assets/about.png"));
+    aboutAct = new QAction(aboutIcon, tr("&About"), this);
     //connect(undoAct, &QAction::triggered, this, &MainWindow::importData);
-    mainToolBar->addAction(waveAct);
-
+    mainToolBar->addAction(aboutAct);
 }
 
 void MainWindow::createDockWindows()
@@ -145,10 +155,12 @@ void MainWindow::import()
     }
 
     ImportDialog dialog;
-    dialog.setWindowTitle(QString(tr("Import")));
-    if(dialog.exec() != QDialog::Accepted)
-        return;
-
+    dialog.setWindowTitle(QString(tr("Data import")));
+    if(dialog.exec() == QDialog::Accepted)
+        withHeader = true;
+    else
+        withHeader = false;
+    
     QFileInfo info(dataFile);
     qDebug()<<info.fileName();
     fileList->addItem(info.fileName());
@@ -157,7 +169,7 @@ void MainWindow::import()
     future = QtConcurrent::run(this,&MainWindow::importThread);
 
     future.waitForFinished();
-    statusBar()->showMessage(QString(tr("Data imported")));
+    statusBar()->showMessage(QString(tr("Ready")));
 
     if(dataFile.isOpen())
         dataFile.close();
@@ -165,14 +177,76 @@ void MainWindow::import()
 
 void MainWindow::importThread()
 {
+    m_index = dataList.length();
     dataList.append(dataFile.readAll());
     dataFile.seek(0);
-    QByteArray line = dataFile.readLine();
-    QString header(line);
+    QString line(dataFile.readLine());
+    QStringList header, tmp;
+    int i = 0;
 
+    header<<line.simplified();
+    
+    if(line.contains(CSV_DELIMITER_TAB))
+    {
+        tmp = line.split(CSV_DELIMITER_TAB);
+        header.clear();
+        foreach(const QString &s,tmp)
+        {
+            header << s.simplified();
+        }
+    }
+    
+    if(line.contains(CSV_DELIMITER_COMMA))
+    {
+        tmp = header;
+        tmp.detach();
+        header.clear();
+        foreach(const QString &s,tmp)
+        {
+            header << s.split(CSV_DELIMITER_COMMA);
+        }
+    }
 
+    if(line.contains(CSV_DELIMITER_SEMICOLON))
+    {
+        tmp = header;
+        tmp.detach();
+        header.clear();
+        foreach(const QString &s,tmp)
+        {
+            header << s.split(CSV_DELIMITER_SEMICOLON);
+        }
+    }
+
+    tmp = header;
+    tmp.detach();
+    header.clear();
+    i = 1;
+    foreach(const QString &s,tmp)
+    {
+        if(s.isEmpty())
+            header<<QString(tr("Row"))+QString::number(i);
+        else
+            header<<s;
+        i++;
+    }
+    
+    if(!withHeader)
+    {
+        tmp = header;
+        tmp.detach();
+        header.clear();
+        i = 1;
+        foreach(const QString &s,tmp)
+        {
+            Q_UNUSED(s)
+            header<<QString(tr("Row"))+QString::number(i++);
+        }
+    }
+    
     columnList->clear();
-    columnList->addItems(header.simplified().split(','));
+    columnList->addItems(header);
+    headerList.append(header);
 }
 
 void MainWindow::showAbout()
@@ -210,7 +284,9 @@ void MainWindow::fileListContextMenu(const QPoint &pos)
 {
     QPoint item = fileList->mapToGlobal(pos);
     QMenu submenu;
-    submenu.addAction("ADD");
+    submenu.addAction("Import data from CSV file");
+    submenu.addAction("Export data to CSV file");
+    submenu.addAction("Paste");
     submenu.addAction("Delete");
     QAction* rightClickItem = submenu.exec(item);
     if (rightClickItem && rightClickItem->text().contains("Delete") )
