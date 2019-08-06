@@ -81,6 +81,12 @@ void MainWindow::createActions()
     //connect(undoAct, &QAction::triggered, this, &MainWindow::importData);
     mainToolBar->addAction(pasteAct);
 
+    const QIcon mergeIcon = QIcon::fromTheme("document-new", QIcon(":/assets/merge.png"));
+    mergeAct = new QAction(mergeIcon, tr("&Merge"), this);
+//    pasteAct->setShortcut(QKeySequence::);
+    //connect(undoAct, &QAction::triggered, this, &MainWindow::importData);
+    mainToolBar->addAction(mergeAct);
+    
     const QIcon deleteIcon = QIcon::fromTheme("document-new", QIcon(":/assets/delete.png"));
     deleteAct = new QAction(deleteIcon, tr("&Delete"), this);
     deleteAct->setShortcut(QKeySequence::Delete);
@@ -110,8 +116,8 @@ void MainWindow::createDockWindows()
     addDockWidget(Qt::LeftDockWidgetArea, dock);
     fileList->setSelectionMode(QAbstractItemView::ExtendedSelection);
     fileList->setContextMenuPolicy(Qt::CustomContextMenu);
-    connect(fileList, SIGNAL(itemSelectionChanged()),
-            this, SLOT(fileListItemSelectionChanged()));
+    connect(fileList, SIGNAL(itemDoubleClicked(QListWidgetItem *)),
+            this, SLOT(fileListItemDoubleClicked(QListWidgetItem *)));
     connect(fileList, SIGNAL(customContextMenuRequested(const QPoint &)),
             this, SLOT(fileListContextMenu(const QPoint &)));
 
@@ -124,10 +130,10 @@ void MainWindow::createDockWindows()
     addDockWidget(Qt::LeftDockWidgetArea, dock);
     columnList->setSelectionMode(QAbstractItemView::ExtendedSelection);
     columnList->setContextMenuPolicy(Qt::CustomContextMenu);
-    connect(columnList, SIGNAL(itemSelectionChanged()),
-            this, SLOT(signalListItemSelectionChanged()));
+    connect(columnList, SIGNAL(itemDoubleClicked(QListWidgetItem *)),
+            this, SLOT(columnListItemDoubleClicked(QListWidgetItem *)));
     connect(columnList, SIGNAL(customContextMenuRequested(const QPoint &)),
-            this, SLOT(signalListContextMenu(const QPoint &)));
+            this, SLOT(columnListContextMenu(const QPoint &)));
 }
 
 bool MainWindow::initGraphContext()
@@ -166,87 +172,14 @@ void MainWindow::import()
     fileList->addItem(info.fileName());
 
     statusBar()->showMessage(QString(tr("Start importing ...")));
-    future = QtConcurrent::run(this,&MainWindow::importThread);
+    event = EVENT_FILE_IMPORT;
+    future = QtConcurrent::run(this,&MainWindow::eventProcessor);
 
     future.waitForFinished();
     statusBar()->showMessage(QString(tr("Ready")));
 
     if(dataFile.isOpen())
         dataFile.close();
-}
-
-void MainWindow::importThread()
-{
-    m_index = dataList.length();
-    dataList.append(dataFile.readAll());
-    dataFile.seek(0);
-    QString line(dataFile.readLine());
-    QStringList header, tmp;
-    int i = 0;
-
-    header<<line.simplified();
-    
-    if(line.contains(CSV_DELIMITER_TAB))
-    {
-        tmp = line.split(CSV_DELIMITER_TAB);
-        header.clear();
-        foreach(const QString &s,tmp)
-        {
-            header << s.simplified();
-        }
-    }
-    
-    if(line.contains(CSV_DELIMITER_COMMA))
-    {
-        tmp = header;
-        tmp.detach();
-        header.clear();
-        foreach(const QString &s,tmp)
-        {
-            header << s.split(CSV_DELIMITER_COMMA);
-        }
-    }
-
-    if(line.contains(CSV_DELIMITER_SEMICOLON))
-    {
-        tmp = header;
-        tmp.detach();
-        header.clear();
-        foreach(const QString &s,tmp)
-        {
-            header << s.split(CSV_DELIMITER_SEMICOLON);
-        }
-    }
-
-    tmp = header;
-    tmp.detach();
-    header.clear();
-    i = 1;
-    foreach(const QString &s,tmp)
-    {
-        if(s.isEmpty())
-            header<<QString(tr("Row"))+QString::number(i);
-        else
-            header<<s;
-        i++;
-    }
-    
-    if(!withHeader)
-    {
-        tmp = header;
-        tmp.detach();
-        header.clear();
-        i = 1;
-        foreach(const QString &s,tmp)
-        {
-            Q_UNUSED(s)
-            header<<QString(tr("Row"))+QString::number(i++);
-        }
-    }
-    
-    columnList->clear();
-    columnList->addItems(header);
-    headerList.append(header);
 }
 
 void MainWindow::showAbout()
@@ -275,40 +208,253 @@ void MainWindow::showAbout()
     m_dialog.exec();
 }
 
-void MainWindow::fileListItemSelectionChanged()
+void MainWindow::fileListItemDoubleClicked(QListWidgetItem *item)
 {
-    qDebug()<<"file list selection changed";
+    columnList->clear();
+    columnList->addItems(headerList.at(fileList->row(item)));
 }
-
+        
 void MainWindow::fileListContextMenu(const QPoint &pos)
 {
+    currentIterm   = fileList->currentItem();
+    currentRow = fileList->currentRow();
+    selectedIterms = fileList->selectedItems();
+    
     QPoint item = fileList->mapToGlobal(pos);
     QMenu submenu;
-    submenu.addAction("Import data from CSV file");
-    submenu.addAction("Export data to CSV file");
-    submenu.addAction("Paste");
-    submenu.addAction("Delete");
+    submenu.addAction(tr("Import data from CSV file"));
+    submenu.addAction(tr("Export data to CSV file"));
+    submenu.addAction(tr("Copy"));
+    if(!fileClipboard.isEmpty())
+        submenu.addAction(tr("Paste"));
+    if(selectedIterms.length() > 1)
+        submenu.addAction(tr("Merge"));    
+    submenu.addAction(tr("Delete"));
+    
     QAction* rightClickItem = submenu.exec(item);
-    if (rightClickItem && rightClickItem->text().contains("Delete") )
+    if (!rightClickItem)
+        return;
+    if (rightClickItem->text().contains(tr("Import data from CSV file")) )
     {
-        //ui->listFiles->takeItem(ui->listFiles->indexAt(pos).row());
+        import();
     }
+    else if (rightClickItem->text().contains(tr("Export data to CSV file")) )
+    {
+        event = EVENT_FILE_EXPORT;
+    }
+    else if (rightClickItem->text().contains(tr("Copy")) )
+    {
+        event = EVENT_FILE_COPY; 
+    }
+    else if (rightClickItem->text().contains(tr("Paste")) )
+    {
+        event = EVENT_FILE_PASTE; 
+    }
+    else if (rightClickItem->text().contains(tr("Delete")) )
+    {
+        event = EVENT_FILE_DELETE;
+    }
+    
+    future = QtConcurrent::run(this,&MainWindow::eventProcessor);
+
+    future.waitForFinished();
 }
 
-void MainWindow::signalListItemSelectionChanged()
+void MainWindow::columnListItemDoubleClicked(QListWidgetItem *item)
 {
-    qDebug()<<"signal list selection changed";
+    qDebug()<<item->text();            
 }
 
-void MainWindow::signalListContextMenu(const QPoint &pos)
+void MainWindow::columnListContextMenu(const QPoint &pos)
 {
+    currentIterm   = columnList->currentItem();
+    currentRow = columnList->currentRow();
+    selectedIterms = columnList->selectedItems();
+
     QPoint item = columnList->mapToGlobal(pos);
     QMenu submenu;
-    submenu.addAction("ADD");
-    submenu.addAction("Delete");
+    submenu.addAction(tr("Create a new file"));
+    submenu.addAction(tr("Export data to CSV file"));
+    submenu.addAction(tr("Copy"));
+    if(!columnClipboard.isEmpty())
+        submenu.addAction(tr("Paste"));
+    submenu.addAction(tr("Delete"));
+    
     QAction* rightClickItem = submenu.exec(item);
-    if (rightClickItem && rightClickItem->text().contains("Delete") )
+    if (!rightClickItem)
+        return;
+    if (rightClickItem->text().contains(tr("Create a new file")) )
     {
-        //ui->listFiles->takeItem(ui->listFiles->indexAt(pos).row());
+        event = EVENT_COLUMN_CREATE;
+    }
+    else if (rightClickItem->text().contains(tr("Export data to CSV file")) )
+    {
+        event = EVENT_COLUMN_EXPORT;
+    }
+    else if (rightClickItem->text().contains(tr("Copy")) )
+    {
+        event = EVENT_COLUMN_COPY;
+    }
+    else if (rightClickItem->text().contains(tr("Paste")) )
+    {
+        event = EVENT_COLUMN_PASTE;
+    }
+    else if (rightClickItem->text().contains(tr("Delete")) )
+    {
+        event = EVENT_COLUMN_DELETE;
+    }
+    
+    future = QtConcurrent::run(this,&MainWindow::eventProcessor);
+
+    future.waitForFinished();
+}
+
+void MainWindow::eventProcessor()
+{
+    int index = 0;
+    QString line;
+    QStringList header, tmp;
+    
+    switch(event)
+    {
+    case EVENT_GENERAL_UNDO:
+        break;
+    case EVENT_GENERAL_REDO:
+        break;
+    case EVENT_FILE_IMPORT:
+        dataList.append(dataFile.readAll());
+        dataFile.seek(0);
+        line.clear();
+        line.append(dataFile.readLine());
+        
+        header<<line.simplified();
+        
+        if(line.contains(CSV_DELIMITER_TAB))
+        {
+            tmp = line.split(CSV_DELIMITER_TAB);
+            header.clear();
+            foreach(const QString &s,tmp)
+            {
+                header << s.simplified();
+            }
+        }
+        
+        if(line.contains(CSV_DELIMITER_COMMA))
+        {
+            tmp = header;
+            tmp.detach();
+            header.clear();
+            foreach(const QString &s,tmp)
+            {
+                header << s.split(CSV_DELIMITER_COMMA);
+            }
+        }
+    
+        if(line.contains(CSV_DELIMITER_SEMICOLON))
+        {
+            tmp = header;
+            tmp.detach();
+            header.clear();
+            foreach(const QString &s,tmp)
+            {
+                header << s.split(CSV_DELIMITER_SEMICOLON);
+            }
+        }
+    
+        tmp = header;
+        tmp.detach();
+        header.clear();
+        index = 1;
+        foreach(const QString &s,tmp)
+        {
+            if(s.isEmpty())
+                header<<QString(tr("Row"))+QString::number(index);
+            else
+                header<<s;
+            index++;
+        }
+        
+        if(!withHeader)
+        {
+            tmp = header;
+            tmp.detach();
+            header.clear();
+            index = 1;
+            foreach(const QString &s,tmp)
+            {
+                Q_UNUSED(s)
+                header<<QString(tr("Row"))+QString::number(index++);
+            }
+        }
+        
+        columnList->clear();
+        columnList->addItems(header);
+        headerList.append(header);
+        break;
+    case EVENT_FILE_EXPORT:
+        break;
+    case EVENT_FILE_COPY:
+        fileClipboard.clear();
+        fileClipboard = selectedIterms;
+        break;
+    case EVENT_FILE_PASTE:
+        foreach(QListWidgetItem* item, fileClipboard)
+        {
+            index = fileList->row(item);
+            QByteArray data = dataList.at(index);
+            data.detach();
+            dataList.append(data);
+            QStringList header = headerList.at(index);
+            headerList.append(header);
+            fileList->addItem(QString(item->text()));
+            currentRow++;
+        }
+        break;
+    case EVENT_FILE_MERGE:
+        break;
+    case EVENT_FILE_DELETE:
+        foreach(QListWidgetItem* item, selectedIterms)
+        {
+            index = fileList->row(item);
+            dataList.removeAt(index);
+            headerList.removeAt(index);
+            fileList->removeItemWidget(item);
+            delete item; // Qt documentation warnings you to destroy item to effectively remove it from QListWidget.
+        }
+        break;
+    case EVENT_COLUMN_CREATE:
+        break;
+    case EVENT_COLUMN_EXPORT:
+        break;
+    case EVENT_COLUMN_COPY:
+        columnClipboard.clear();
+        columnClipboard = selectedIterms;
+        break;
+    case EVENT_COLUMN_PASTE:
+        break;
+    case EVENT_COLUMN_DELETE:
+        foreach(QListWidgetItem* item, selectedIterms)
+        {
+//            index = fileList->row(item);
+//            dataList.removeAt(index);
+//            headerList.removeAt(index);
+            columnList->removeItemWidget(item);
+            delete item; // Qt documentation warnings you to destroy item to effectively remove it from QListWidget.
+        }
+        break;
+    case EVENT_PLOT_CUT:
+        break;
+    case EVENT_PLOT_COPY:
+        break;
+    case EVENT_PLOT_PASTE:
+        break;
+    case EVENT_PLOT_MERGE:
+        break;
+    case EVENT_PLOT_DELETE:
+        break;
+    case EVENT_PLOT_TRIM:
+        break;
+    case EVENT_PLOT_UPDATE:
+        break;
     }
 }

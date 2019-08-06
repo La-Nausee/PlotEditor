@@ -12,5 +12,6 @@
         <file>assets/waveform.png</file>
         <file>assets/about.png</file>
         <file>assets/redo.png</file>
+        <file>assets/merge.png</file>
     </qresource>
 </RCC>
