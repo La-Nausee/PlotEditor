@@ -30,6 +30,7 @@ enum EVENT{
     EVENT_FILE_DELETE,
     EVENT_COLUMN_CREATE,
     EVENT_COLUMN_EXPORT,
+    EVENT_COLUMN_CUT,
     EVENT_COLUMN_COPY,
     EVENT_COLUMN_PASTE,
     EVENT_COLUMN_DELETE,
@@ -56,8 +57,10 @@ public:
 private slots:
     void import();
     void showAbout();
+    void fileListItemSelectionChanged();
     void fileListItemDoubleClicked(QListWidgetItem *item);
     void fileListContextMenu(const QPoint &);
+    void columnListItemSelectionChanged();
     void columnListItemDoubleClicked(QListWidgetItem *item);
     void columnListContextMenu(const QPoint &);
 private:

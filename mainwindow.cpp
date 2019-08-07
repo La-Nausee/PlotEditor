@@ -54,35 +54,41 @@ void MainWindow::createActions()
     const QIcon undoIcon = QIcon::fromTheme("document-new", QIcon(":/assets/undo.png"));
     undoAct = new QAction(undoIcon, tr("&Undo"), this);
     undoAct->setShortcut(QKeySequence::Undo);
+    undoAct->setEnabled(false);
     //connect(undoAct, &QAction::triggered, this, &MainWindow::importData);
     mainToolBar->addAction(undoAct);
     
     const QIcon redoIcon = QIcon::fromTheme("document-new", QIcon(":/assets/redo.png"));
     redoAct = new QAction(redoIcon, tr("&Redo"), this);
     redoAct->setShortcut(QKeySequence::Redo);
+    redoAct->setEnabled(false);
     mainToolBar->addAction(redoAct);
     //connect(undoAct, &QAction::triggered, this, &MainWindow::importData);
 
     const QIcon cutIcon = QIcon::fromTheme("document-new", QIcon(":/assets/cut.png"));
     cutAct = new QAction(cutIcon, tr("&Cut"), this);
     cutAct->setShortcut(QKeySequence::Cut);
+    cutAct->setEnabled(false);
     //connect(undoAct, &QAction::triggered, this, &MainWindow::importData);
     mainToolBar->addAction(cutAct);
 
     const QIcon copyIcon = QIcon::fromTheme("document-new", QIcon(":/assets/copy.png"));
     copyAct = new QAction(copyIcon, tr("&Copy"), this);
     copyAct->setShortcut(QKeySequence::Copy);
+    copyAct->setEnabled(false);
     //connect(undoAct, &QAction::triggered, this, &MainWindow::importData);
     mainToolBar->addAction(copyAct);
 
     const QIcon pasteIcon = QIcon::fromTheme("document-new", QIcon(":/assets/paste.png"));
     pasteAct = new QAction(pasteIcon, tr("&Paste"), this);
     pasteAct->setShortcut(QKeySequence::Paste);
+    pasteAct->setEnabled(false);
     //connect(undoAct, &QAction::triggered, this, &MainWindow::importData);
     mainToolBar->addAction(pasteAct);
 
     const QIcon mergeIcon = QIcon::fromTheme("document-new", QIcon(":/assets/merge.png"));
     mergeAct = new QAction(mergeIcon, tr("&Merge"), this);
+    mergeAct->setEnabled(false);
 //    pasteAct->setShortcut(QKeySequence::);
     //connect(undoAct, &QAction::triggered, this, &MainWindow::importData);
     mainToolBar->addAction(mergeAct);
@@ -90,11 +96,13 @@ void MainWindow::createActions()
     const QIcon deleteIcon = QIcon::fromTheme("document-new", QIcon(":/assets/delete.png"));
     deleteAct = new QAction(deleteIcon, tr("&Delete"), this);
     deleteAct->setShortcut(QKeySequence::Delete);
+    deleteAct->setEnabled(false);
     //connect(undoAct, &QAction::triggered, this, &MainWindow::importData);
     mainToolBar->addAction(deleteAct);
 
     const QIcon trimIcon = QIcon::fromTheme("document-new", QIcon(":/assets/trim.png"));
     trimAct = new QAction(trimIcon, tr("&Trim"), this);
+    trimAct->setEnabled(false);
     //connect(undoAct, &QAction::triggered, this, &MainWindow::importData);
     mainToolBar->addAction(trimAct);
 
@@ -116,6 +124,8 @@ void MainWindow::createDockWindows()
     addDockWidget(Qt::LeftDockWidgetArea, dock);
     fileList->setSelectionMode(QAbstractItemView::ExtendedSelection);
     fileList->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(fileList, SIGNAL(itemSelectionChanged()),
+            this, SLOT(fileListItemSelectionChanged()));
     connect(fileList, SIGNAL(itemDoubleClicked(QListWidgetItem *)),
             this, SLOT(fileListItemDoubleClicked(QListWidgetItem *)));
     connect(fileList, SIGNAL(customContextMenuRequested(const QPoint &)),
@@ -130,6 +140,8 @@ void MainWindow::createDockWindows()
     addDockWidget(Qt::LeftDockWidgetArea, dock);
     columnList->setSelectionMode(QAbstractItemView::ExtendedSelection);
     columnList->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(columnList, SIGNAL(itemSelectionChanged()),
+            this, SLOT(columnListItemSelectionChanged()));
     connect(columnList, SIGNAL(itemDoubleClicked(QListWidgetItem *)),
             this, SLOT(columnListItemDoubleClicked(QListWidgetItem *)));
     connect(columnList, SIGNAL(customContextMenuRequested(const QPoint &)),
@@ -208,12 +220,26 @@ void MainWindow::showAbout()
     m_dialog.exec();
 }
 
+void MainWindow::fileListItemSelectionChanged()
+{
+    selectedIterms = fileList->selectedItems();
+
+    cutAct->setEnabled(false);
+    copyAct->setEnabled(!selectedIterms.isEmpty());  
+    pasteAct->setEnabled(!selectedIterms.isEmpty() && !fileClipboard.isEmpty());
+    mergeAct->setEnabled(false);
+    deleteAct->setEnabled(!selectedIterms.isEmpty());
+    trimAct->setEnabled(false);
+}
+
 void MainWindow::fileListItemDoubleClicked(QListWidgetItem *item)
 {
     columnList->clear();
     columnList->addItems(headerList.at(fileList->row(item)));
+     
+    
 }
-        
+ 
 void MainWindow::fileListContextMenu(const QPoint &pos)
 {
     currentIterm   = fileList->currentItem();
@@ -226,9 +252,13 @@ void MainWindow::fileListContextMenu(const QPoint &pos)
     submenu.addAction(tr("Export data to CSV file"));
     submenu.addAction(tr("Copy"));
     if(!fileClipboard.isEmpty())
+    {
         submenu.addAction(tr("Paste"));
+    }
     if(selectedIterms.length() > 1)
-        submenu.addAction(tr("Merge"));    
+    {
+        submenu.addAction(tr("Merge"));
+    }
     submenu.addAction(tr("Delete"));
     
     QAction* rightClickItem = submenu.exec(item);
@@ -260,9 +290,23 @@ void MainWindow::fileListContextMenu(const QPoint &pos)
     future.waitForFinished();
 }
 
+void MainWindow::columnListItemSelectionChanged()
+{
+    selectedIterms = columnList->selectedItems();
+
+    cutAct->setEnabled(!selectedIterms.isEmpty());
+    copyAct->setEnabled(!selectedIterms.isEmpty());  
+    pasteAct->setEnabled(!selectedIterms.isEmpty() && !columnClipboard.isEmpty());
+    mergeAct->setEnabled(selectedIterms.length()>1);
+    deleteAct->setEnabled(!selectedIterms.isEmpty());
+    trimAct->setEnabled(false);
+
+}
+
 void MainWindow::columnListItemDoubleClicked(QListWidgetItem *item)
 {
-    qDebug()<<item->text();            
+    qDebug()<<item->text(); 
+    
 }
 
 void MainWindow::columnListContextMenu(const QPoint &pos)
@@ -275,9 +319,12 @@ void MainWindow::columnListContextMenu(const QPoint &pos)
     QMenu submenu;
     submenu.addAction(tr("Create a new file"));
     submenu.addAction(tr("Export data to CSV file"));
+    submenu.addAction(tr("Cut"));
     submenu.addAction(tr("Copy"));
     if(!columnClipboard.isEmpty())
+    {
         submenu.addAction(tr("Paste"));
+    }
     submenu.addAction(tr("Delete"));
     
     QAction* rightClickItem = submenu.exec(item);
@@ -290,6 +337,10 @@ void MainWindow::columnListContextMenu(const QPoint &pos)
     else if (rightClickItem->text().contains(tr("Export data to CSV file")) )
     {
         event = EVENT_COLUMN_EXPORT;
+    }
+    else if (rightClickItem->text().contains(tr("Cut")) )
+    {
+        event = EVENT_COLUMN_CUT;
     }
     else if (rightClickItem->text().contains(tr("Copy")) )
     {
@@ -396,6 +447,7 @@ void MainWindow::eventProcessor()
     case EVENT_FILE_COPY:
         fileClipboard.clear();
         fileClipboard = selectedIterms;
+        pasteAct->setEnabled(true);
         break;
     case EVENT_FILE_PASTE:
         foreach(QListWidgetItem* item, fileClipboard)
@@ -426,9 +478,15 @@ void MainWindow::eventProcessor()
         break;
     case EVENT_COLUMN_EXPORT:
         break;
+    case EVENT_COLUMN_CUT:
+        columnClipboard.clear();
+        columnClipboard = selectedIterms;
+        pasteAct->setEnabled(true);
+        break;
     case EVENT_COLUMN_COPY:
         columnClipboard.clear();
         columnClipboard = selectedIterms;
+        pasteAct->setEnabled(true);
         break;
     case EVENT_COLUMN_PASTE:
         break;
